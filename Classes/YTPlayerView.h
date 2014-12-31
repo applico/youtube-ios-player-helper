@@ -35,6 +35,7 @@ typedef enum {
     kYTPlaybackQualityHD720,
     kYTPlaybackQualityHD1080,
     kYTPlaybackQualityHighRes,
+    kYTPlaybackQualityAuto, // additon for YouTube Live Events
     kYTPlaybackQualityUnknown /** This should never be returned. It is here for future proofing. */
 } YTPlaybackQuality;
 
@@ -634,5 +635,8 @@ typedef enum {
  * @return The 0-based index of the currently playing item in the playlist.
  */
 - (int)playlistIndex;
+
+#pragma mark - Screenshot
+- (UIImage *)drawGlToImage;
 
 @end

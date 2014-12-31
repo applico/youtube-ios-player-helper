@@ -14,6 +14,10 @@
 
 #import "YTPlayerView.h"
 
+#import <OpenGLES/EAGL.h>
+#import <OpenGLES/ES2/gl.h>
+#import <GLKit/GLKit.h>
+
 // These are instances of NSString because we get them from parsing a URL. It would be silly to
 // convert these into an integer just to have to convert the URL query string value into an integer
 // as well for the sake of doing a value comparison. A full list of response error codes can be
@@ -34,6 +38,7 @@ NSString static *const kYTPlaybackQualityLargeQuality = @"large";
 NSString static *const kYTPlaybackQualityHD720Quality = @"hd720";
 NSString static *const kYTPlaybackQualityHD1080Quality = @"hd1080";
 NSString static *const kYTPlaybackQualityHighResQuality = @"highres";
+NSString static *const kYTPlaybackQualityAutoQuality = @"auto";
 NSString static *const kYTPlaybackQualityUnknownQuality = @"unknown";
 
 // Constants representing YouTube player errors.
@@ -394,7 +399,11 @@ NSString static *const kYTPlayerEmbedUrlRegexPattern = @"^http(s)://(www.)youtub
     [self notifyDelegateOfYouTubeCallbackUrl:request.URL];
     return NO;
   } else if ([request.URL.scheme isEqual: @"http"] || [request.URL.scheme isEqual:@"https"]) {
-    return [self handleHttpNavigationToUrl:request.URL];
+      return [self handleHttpNavigationToUrl:request.URL];
+  } else if ( [[[request URL] scheme] isEqualToString:@"callback"] ) {
+      NSLog(@"get callback");
+      
+      return NO;
   }
   return YES;
 }
@@ -420,6 +429,8 @@ NSString static *const kYTPlayerEmbedUrlRegexPattern = @"^http(s)://(www.)youtub
     quality = kYTPlaybackQualityHD1080;
   } else if ([qualityString isEqualToString:kYTPlaybackQualityHighResQuality]) {
     quality = kYTPlaybackQualityHighRes;
+  } else if ([qualityString isEqualToString:kYTPlaybackQualityAutoQuality]) {
+      quality = kYTPlaybackQualityAuto;
   }
 
   return quality;
@@ -445,6 +456,8 @@ NSString static *const kYTPlayerEmbedUrlRegexPattern = @"^http(s)://(www.)youtub
       return kYTPlaybackQualityHD1080Quality;
     case kYTPlaybackQualityHighRes:
       return kYTPlaybackQualityHighResQuality;
+      case kYTPlaybackQualityAuto:
+          return kYTPlaybackQualityAutoQuality;
     default:
       return kYTPlaybackQualityUnknownQuality;
   }
@@ -624,9 +637,8 @@ NSString static *const kYTPlayerEmbedUrlRegexPattern = @"^http(s)://(www.)youtub
   [self addSubview:self.webView];
 
   NSError *error = nil;
-  NSString *path = [[NSBundle mainBundle] pathForResource:@"YTPlayerView-iframe-player"
-                                                   ofType:@"html"
-                                              inDirectory:@"Assets"];
+  NSString *path = [[NSBundle mainBundle] pathForResource:@"YTPlayerView-iframe-player" ofType:@"html"];
+    
   NSString *embedHTMLTemplate =
       [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
 
@@ -654,7 +666,9 @@ NSString static *const kYTPlayerEmbedUrlRegexPattern = @"^http(s)://(www.)youtub
   [self.webView loadHTMLString:embedHTML baseURL:[NSURL URLWithString:@"about:blank"]];
   [self.webView setDelegate:self];
   self.webView.allowsInlineMediaPlayback = YES;
+  self.webView.mediaPlaybackAllowsAirPlay = NO;
   self.webView.mediaPlaybackRequiresUserAction = NO;
+//  self.webView.userInteractionEnabled = NO;
   return YES;
 }
 
@@ -751,6 +765,51 @@ NSString static *const kYTPlayerEmbedUrlRegexPattern = @"^http(s)://(www.)youtub
   webView.scrollView.scrollEnabled = NO;
   webView.scrollView.bounces = NO;
   return webView;
+}
+
+#pragma mark - Screenshot
+- (UIImage *)drawGlToImage
+{
+    int s = 1;
+    UIScreen* screen = [ UIScreen mainScreen ];
+    if ( [ screen respondsToSelector:@selector(scale) ] )
+        s = (int) [ screen scale ];
+    
+    const int w = self.frame.size.width;
+    const int h = self.frame.size.height;
+    const NSInteger myDataLength = w * h * 4 * s * s;
+    // allocate array and read pixels into it.
+    GLubyte *buffer = (GLubyte *) malloc(myDataLength);
+    glReadPixels(0, 0, w*s, h*s, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+    // gl renders "upside down" so swap top to bottom into new array.
+    // there's gotta be a better way, but this works.
+    GLubyte *buffer2 = (GLubyte *) malloc(myDataLength);
+    for(int y = 0; y < h*s; y++)
+    {
+        memcpy( buffer2 + (h*s - 1 - y) * w * 4 * s, buffer + (y * 4 * w * s), w * 4 * s );
+    }
+    free(buffer); // work with the flipped buffer, so get rid of the original one.
+    
+    // make data provider with data.
+    CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, buffer2, myDataLength, NULL);
+    // prep the ingredients
+    int bitsPerComponent = 8;
+    int bitsPerPixel = 32;
+    int bytesPerRow = 4 * w * s;
+    CGColorSpaceRef colorSpaceRef = CGColorSpaceCreateDeviceRGB();
+    CGBitmapInfo bitmapInfo = kCGBitmapByteOrderDefault;
+    CGColorRenderingIntent renderingIntent = kCGRenderingIntentDefault;
+    // make the cgimage
+    CGImageRef imageRef = CGImageCreate(w*s, h*s, bitsPerComponent, bitsPerPixel, bytesPerRow, colorSpaceRef, bitmapInfo, provider, NULL, NO, renderingIntent);
+    // then make the uiimage from that
+    UIImage *myImage = [ UIImage imageWithCGImage:imageRef scale:s orientation:UIImageOrientationUp ];
+//    UIImageWriteToSavedPhotosAlbum( myImage, nil, nil, nil );
+//    CGImageRelease( imageRef );
+//    CGDataProviderRelease(provider);
+//    CGColorSpaceRelease(colorSpaceRef);
+//    free(buffer2);
+    
+    return myImage;
 }
 
 @end
