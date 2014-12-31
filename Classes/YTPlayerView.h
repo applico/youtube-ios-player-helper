@@ -35,7 +35,7 @@ typedef enum {
     kYTPlaybackQualityHD720,
     kYTPlaybackQualityHD1080,
     kYTPlaybackQualityHighRes,
-    kYTPlaybackQualityAuto, // additon for YouTube Live Events
+    kYTPlaybackQualityAuto, // addition for YouTube Live Events
     kYTPlaybackQualityUnknown /** This should never be returned. It is here for future proofing. */
 } YTPlaybackQuality;
 
